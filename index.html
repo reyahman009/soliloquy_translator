@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>英語学習サポートAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* カスタムスクロールバー等があればここに */
+    .loader {
+      border: 3px solid #f3f3f3;
+      border-radius: 50%;
+      border-top: 3px solid #3498db;
+      width: 20px;
+      height: 20px;
+      -webkit-animation: spin 1s linear infinite; /* Safari */
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col">
+
+  <!-- ヘッダー -->
+  <header class="bg-blue-600 text-white p-4 shadow-md z-10 flex justify-between items-center">
+    <h1 class="text-xl font-bold">英語学習サポートAI</h1>
+    <a href="<?= sheetUrl ?>" target="_blank" rel="noopener" class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm font-medium transition duration-200">
+      📝 シートを確認
+    </a>
+  </header>
+
+  <!-- エラーメッセージ表示領域 -->
+  <div id="errorMessageContainer" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded shadow-sm relative">
+    <span id="errorMessageText">エラーが発生しました</span>
+    <button onclick="closeError()" class="absolute top-2 right-2 text-red-600 hover:text-red-800">&times;</button>
+  </div>
+
+  <!-- チャット履歴表示領域 -->
+  <main id="chatArea" class="flex-1 overflow-y-auto w-full max-w-4xl mx-auto p-4 flex flex-col gap-4">
+    <!-- 初期メッセージ -->
+    <div class="flex items-start gap-4">
+      <div class="bg-white border rounded-2xl p-4 shadow-sm text-gray-800 max-w-[80%]">
+        こんにちは！英語の表現や意味について質問してください。<br>
+        質問に答えながら、自動的にスプレッドシートに例文やニュアンスをメモして保存します。
+      </div>
+    </div>
+  </main>
+
+  <!-- ユーザー入力領域 -->
+  <footer class="bg-white p-4 border-t">
+    <div class="w-full max-w-4xl mx-auto flex gap-2">
+      <textarea id="messageInput" rows="1" class="flex-1 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden" placeholder="例: 「It takes two to tango」ってどういう意味？" onkeypress="handleKeyPress(event)"></textarea>
+      <button id="sendButton" onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-xl shadow-md transition duration-200 flex items-center justify-center min-w-[80px]">
+        送信
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    // テキストエリアの高さを自動調整
+    const tx = document.getElementById('messageInput');
+    tx.setAttribute('style', 'height:' + (tx.scrollHeight) + 'px;overflow-y:hidden;');
+    tx.addEventListener("input", OnInput, false);
+
+    function OnInput() {
+      this.style.height = 'auto';
+      this.style.height = (this.scrollHeight) + 'px';
+      if(this.value === '') {
+        this.style.height = 'auto';
+      }
+    }
+
+    function handleKeyPress(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    function showError(message) {
+      const container = document.getElementById('errorMessageContainer');
+      const textNode = document.getElementById('errorMessageText');
+      textNode.textContent = message;
+      container.classList.remove('hidden');
+    }
+
+    function closeError() {
+      document.getElementById('errorMessageContainer').classList.add('hidden');
+    }
+
+    // 簡単なマークダウンをHTMLに変換（段落と太字程度のサポート）
+    function parseMarkdown(text) {
+      // 改行を<br>に変換
+      let html = text.replace(/\n/g, '<br>');
+      // 太字 **text** を <strong>text</strong> に変換
+      html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      return html;
+    }
+
+    function appendUserMessage(text) {
+      const chatArea = document.getElementById('chatArea');
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'flex items-start gap-4 justify-end';
+      const formattedText = parseMarkdown(text);
+      msgDiv.innerHTML = `<div class="bg-blue-100 border rounded-2xl p-4 shadow-sm text-gray-800 max-w-[80%]">${formattedText}</div>`;
+      chatArea.appendChild(msgDiv);
+      scrollToBottom();
+    }
+
+    function appendAiMessage(text) {
+      const chatArea = document.getElementById('chatArea');
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'flex items-start gap-4';
+      const formattedText = parseMarkdown(text);
+      msgDiv.innerHTML = `<div class="bg-white border rounded-2xl p-4 shadow-sm text-gray-800 max-w-[80%]">${formattedText}</div>`;
+      chatArea.appendChild(msgDiv);
+      scrollToBottom();
+    }
+
+    function appendLoading() {
+      const chatArea = document.getElementById('chatArea');
+      const msgDiv = document.createElement('div');
+      msgDiv.id = 'loadingIndicator';
+      msgDiv.className = 'flex items-start gap-4';
+      msgDiv.innerHTML = `<div class="bg-white border rounded-2xl p-4 shadow-sm text-gray-800 flex items-center gap-2"><div class="loader"></div><span>考え中...</span></div>`;
+      chatArea.appendChild(msgDiv);
+      scrollToBottom();
+    }
+
+    function removeLoading() {
+      const loading = document.getElementById('loadingIndicator');
+      if (loading) {
+        loading.remove();
+      }
+    }
+
+    function scrollToBottom() {
+      const chatArea = document.getElementById('chatArea');
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('messageInput');
+      const text = input.value.trim();
+      const sendBtn = document.getElementById('sendButton');
+
+      if (!text) return;
+
+      closeError();
+      appendUserMessage(text);
+      input.value = '';
+      input.style.height = 'auto';
+      input.disabled = true;
+      sendBtn.disabled = true;
+      sendBtn.classList.add('opacity-50');
+
+      appendLoading();
+
+      // バックエンド呼び出し (.withSuccessHandler と .withFailureHandler を必ず実装)
+      google.script.run
+        .withSuccessHandler(function(response) {
+          removeLoading();
+          input.disabled = false;
+          sendBtn.disabled = false;
+          sendBtn.classList.remove('opacity-50');
+          input.focus();
+          
+          if (response && response.reply_message) {
+            appendAiMessage(response.reply_message);
+          } else {
+            showError('無効なレスポンスを受け取りました。');
+          }
+        })
+        .withFailureHandler(function(error) {
+          removeLoading();
+          input.disabled = false;
+          sendBtn.disabled = false;
+          sendBtn.classList.remove('opacity-50');
+          
+          showError(error.message || '通信エラーが発生しました。');
+        })
+        .processChat(text);
+    }
+  </script>
+</body>
+</html>
