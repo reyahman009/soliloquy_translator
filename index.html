@@ -112,7 +112,7 @@
     function showError(message) {
       const container = document.getElementById('errorMessageContainer');
       const textNode = document.getElementById('errorMessageText');
-      textNode.textContent = message;
+      textNode.innerHTML = message;
       container.classList.remove('hidden');
     }
 
@@ -299,6 +299,13 @@
     function toggleVoiceRecognition(mode) {
       if (!SpeechRecognition) {
         showError('お使いのブラウザは音声入力に対応していません。');
+        return;
+      }
+
+      // GASのiframe制限回避：iframe内からマイクを呼び出すと "not-allowed" になるため、別タブへ誘導する
+      if (window.top !== window.self) {
+        showError(`Google Apps Scriptのセキュリティ制限により、この画面表示ではマイクがブロックされます。<br>
+        音声入力を使用するには、<button onclick="window.open(window.location.href, '_blank')" class="underline font-bold text-red-800 ml-1 hover:text-red-600">こちらをクリック</button>して別タブでアプリを直接開き直してください。`);
         return;
       }
 
