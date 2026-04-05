@@ -6,7 +6,28 @@
   <title>語学学習サポートAI</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* カスタムスクロールバー等があればここに */
+    /* カスタムスクロールバー */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background-color: rgba(156, 163, 175, 0.5); /* gray-400 */
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(107, 114, 128, 0.8); /* gray-500 */
+    }
+    
+    /* Firefox環境向けスクロールバー設定 */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+    }
+
     .loader {
       border: 3px solid #f3f3f3;
       border-radius: 50%;
