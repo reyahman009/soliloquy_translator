@@ -297,9 +297,26 @@
         const utterance = new SpeechSynthesisUtterance(text);
         
         // 言語コードのマッピング（見つからなければデフォルトでen-US）
-        // 「自動判定」等で言語名が不明確な場合は一旦英語になる。
-        // ※AIが返してくる `extracted_data.language` が "英語" などになっていればここで拾える
-        utterance.lang = ttsLangCodeMap[langName] || 'en-US';
+        const langCode = ttsLangCodeMap[langName] || 'en-US';
+        utterance.lang = langCode;
+
+        // --- OS/ブラウザにインストールされている音声エンジンを明示的に割り当てる ---
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+            const baseLang = langCode.split('-')[0]; // 例: 'ar'
+            
+            // 1. 完全一致 (ar-SA) → 2. アンダースコア表記 (ar_SA) → 3. 前方一致 (ar-AEなど) の順で探す
+            const targetVoice = voices.find(v => v.lang.replace('_', '-') === langCode) || 
+                                voices.find(v => v.lang.startsWith(baseLang));
+            
+            if (targetVoice) {
+                utterance.voice = targetVoice;
+            } else {
+                // 声が見つからない場合、OS標準の日本語エンジン等がアラビア語を読もうとして「無音」になる現象を防ぐ
+                showError(`お使いの端末（OSやブラウザ）に「${langName}」の音声データがインストールされていない可能性があります。設定から音声パックを追加するか、Chromeなどの別ブラウザでお試しください。`);
+                return;
+            }
+        }
 
         window.speechSynthesis.speak(utterance);
     }
