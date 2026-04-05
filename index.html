@@ -276,6 +276,16 @@
     }
 
     // --- 音声読み上げ (Text-to-Speech) ロジック ---
+    let availableVoices = [];
+    if ('speechSynthesis' in window) {
+        // 初回ロードで取れる分
+        availableVoices = window.speechSynthesis.getVoices();
+        // 遅延でロードされたタイミングでキャッシュ
+        window.speechSynthesis.onvoiceschanged = function() {
+            availableVoices = window.speechSynthesis.getVoices();
+        };
+    }
+
     const ttsLangCodeMap = {
       "英語": "en-US",
       "中国語": "zh-CN",
@@ -301,7 +311,10 @@
         utterance.lang = langCode;
 
         // --- OS/ブラウザにインストールされている音声エンジンを明示的に割り当てる ---
-        const voices = window.speechSynthesis.getVoices();
+        // Chromeの非同期ロード対策としてキャッシュがあればそれを利用
+        let voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) voices = availableVoices;
+
         if (voices.length > 0) {
             const baseLang = langCode.split('-')[0]; // 例: 'ar'
             
@@ -312,10 +325,15 @@
             if (targetVoice) {
                 utterance.voice = targetVoice;
             } else {
-                // 声が見つからない場合、OS標準の日本語エンジン等がアラビア語を読もうとして「無音」になる現象を防ぐ
-                showError(`お使いの端末（OSやブラウザ）に「${langName}」の音声データがインストールされていない可能性があります。設定から音声パックを追加するか、Chromeなどの別ブラウザでお試しください。`);
+                // 声が見つからない場合はエラーを出す
+                showError(`「${langName}」の音声がOSにインストールされていません。<br>
+                Google Apps Scriptの制限によりChrome専用のクラウド音声がブロックされてしまうため、<b>Windowsの「設定＞時刻と言語＞音声認識」からアラビア語の音声パックを直接インストール</b>してください。`);
                 return;
             }
+        } else {
+             // まだロード中か完全にブロックされている場合
+             showError('音声機能のロード中です。数秒待ってからもう一度お試しください。');
+             return;
         }
 
         window.speechSynthesis.speak(utterance);
