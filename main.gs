@@ -23,9 +23,10 @@ function doGet(e) {
 /**
  * フロントエンドから非同期通信(google.script.run)経由で呼び出されるメイン処理関数
  * @param {string} message ユーザーが画面（テキストボックス）から入力したチャットテキスト
+ * @param {string} targetLanguage ユーザーが選択した学習対象言語
  * @returns {Object} 画面に表示するAIのメッセージを含んだオブジェクト
  */
-function processChat(message) {
+function processChat(message, targetLanguage = "自動判定") {
   // 1. バリデーション: メッセージが空でないか確認
   if (!message || message.trim() === '') {
     throw new Error("メッセージが空です。");
@@ -33,7 +34,7 @@ function processChat(message) {
 
   try {
     // 2. Gemini APIの呼び出し：文章の生成と「構造化データ」の抽出を行う
-    const aiResponse = callGeminiApi(message);
+    const aiResponse = callGeminiApi(message, targetLanguage);
 
     // AIからのレスポンス形式が正しいか（設定したJSONスキーマ通りか）確認
     if (!aiResponse || !aiResponse.reply_message || !aiResponse.extracted_data) {
@@ -57,9 +58,10 @@ function processChat(message) {
 /**
  * Gemini APIと実際に通信を行い、生成結果（レスポンス）を取得する関数
  * @param {string} userMessage ユーザーからの入力テキスト
+ * @param {string} targetLanguage 対象とする言語
  * @returns {Object} APIからパースされたJSON形式のレスポンス（回答と抽出データ）
  */
-function callGeminiApi(userMessage) {
+function callGeminiApi(userMessage, targetLanguage) {
   // スクリプトプロパティからGemini APIキーを取得
   const apiKey = SCRIPT_PROPERTIES.getProperty('GEMINI_API_KEY');
   if (!apiKey) {
@@ -71,8 +73,8 @@ function callGeminiApi(userMessage) {
 
   // AIに与える指示（役割設定、出力フォーマットの制限など）
   const prompt = `
-あなたは英語学習をサポートする優秀なAIアシスタントです。
-ユーザーから英語の表現や意味についての質問が届きます。
+あなたは${targetLanguage === "自動判定" ? "語学" : targetLanguage}学習をサポートする優秀なAIアシスタントです。
+ユーザーから${targetLanguage === "自動判定" ? "対象となる言語" : targetLanguage}の表現や意味についての質問が届きます。
 ユーザーへの親切で自然な日本語の回答（reply_message）と、その表現から抽出した構造化データ（extracted_data）を生成してください。
 返信は必ずJSONのみを出力してください。マークダウンの\`\`\`jsonなどは含めず、純粋なJSONオブジェクトを返してください。
 
@@ -99,19 +101,20 @@ function callGeminiApi(userMessage) {
             "type": "OBJECT",
             "description": "スプレッドシートに保存するための構造化データ",
             "properties": {
-              "phrase": { "type": "STRING", "description": "対象の英語表現" },
+              "phrase": { "type": "STRING", "description": "対象の言語表現" },
+              "language": { "type": "STRING", "description": "対象の言語名（例: 英語、中国語、アラビア語など）" },
               "translation": { "type": "STRING", "description": "日本語訳" },
               "nuance_context": { "type": "STRING", "description": "ニュアンスや使用される文脈" },
               "examples": {
                 "type": "ARRAY",
-                "items": { "type": "STRING", "description": "英語の例文と日本語訳（例: 'This is an example. - これは例文です。')" }
+                "items": { "type": "STRING", "description": "対象言語の例文と日本語訳（例: 'Bonjour. - こんにちは。')" }
               },
               "tags": {
                 "type": "ARRAY",
                 "items": { "type": "STRING", "description": "カテゴリタグ" }
               }
             },
-            "required": ["phrase", "translation", "nuance_context", "examples", "tags"]
+            "required": ["phrase", "language", "translation", "nuance_context", "examples", "tags"]
           }
         },
         "required": ["reply_message", "extracted_data"]
@@ -157,7 +160,7 @@ function saveToSheet(extractedData) {
 
   // シートが完全に空（1行目すらない）場合は、初回データ保存前に自動でヘッダー行を作成
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['ID', 'Timestamp', 'Phrase', 'Translation', 'Nuance/Context', 'Examples', 'Tags']);
+    sheet.appendRow(['ID', 'Timestamp', 'Language', 'Phrase', 'Translation', 'Nuance/Context', 'Examples', 'Tags']);
   }
 
   // 個別のID(UUID)と、保存日時のためのタイムスタンプ(ISO文字列)を生成
@@ -168,10 +171,11 @@ function saveToSheet(extractedData) {
   const examplesStr = JSON.stringify(extractedData.examples || []);
   const tagsStr = JSON.stringify(extractedData.tags || []);
 
-  // シートの各列（A列〜G列）の並びに合わせた1行分のデータ配列を作成
+  // シートの各列（A列〜H列）の並びに合わせた1行分のデータ配列を作成
   const rowData = [
     id,
     timestamp,
+    extractedData.language || "",
     extractedData.phrase || "",
     extractedData.translation || "",
     extractedData.nuance_context || "",
