@@ -16,7 +16,7 @@ function doGet(e) {
   template.sheetUrl = SpreadsheetApp.getActiveSpreadsheet().getUrl();
 
   return template.evaluate()
-    .setTitle('英語学習チャット')
+    .setTitle('語学学習サポートAI')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
@@ -26,7 +26,7 @@ function doGet(e) {
  * @param {string} targetLanguage ユーザーが選択した学習対象言語
  * @returns {Object} 画面に表示するAIのメッセージを含んだオブジェクト
  */
-function processChat(message, targetLanguage = "自動判定") {
+function processChat(message, targetLanguage = "自動判定", modelName = "gemini-2.5-flash-lite") {
   // 1. バリデーション: メッセージが空でないか確認
   if (!message || message.trim() === '') {
     throw new Error("メッセージが空です。");
@@ -34,7 +34,7 @@ function processChat(message, targetLanguage = "自動判定") {
 
   try {
     // 2. Gemini APIの呼び出し：文章の生成と「構造化データ」の抽出を行う
-    const aiResponse = callGeminiApi(message, targetLanguage);
+    const aiResponse = callGeminiApi(message, targetLanguage, modelName);
 
     // AIからのレスポンス形式が正しいか（設定したJSONスキーマ通りか）確認
     if (!aiResponse || !aiResponse.reply_message || !aiResponse.extracted_data) {
@@ -64,15 +64,15 @@ function processChat(message, targetLanguage = "自動判定") {
  * @param {string} targetLanguage 対象とする言語
  * @returns {Object} APIからパースされたJSON形式のレスポンス（回答と抽出データ）
  */
-function callGeminiApi(userMessage, targetLanguage) {
+function callGeminiApi(userMessage, targetLanguage, modelName = "gemini-2.5-flash-lite") {
   // スクリプトプロパティからGemini APIキーを取得
   const apiKey = SCRIPT_PROPERTIES.getProperty('GEMINI_API_KEY');
   if (!apiKey) {
     throw new Error("Gemini APIキーが設定されていません。スクリプトプロパティを確認してください。");
   }
 
-  // 利用するAPIのエンドポイント（最新の gemini-2.5-flash モデルを指定）
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  // 利用するAPIのエンドポイント（フロントから選択されたモデルを使用）
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   // AIに与える指示（役割設定、出力フォーマットの制限など）
   const prompt = `

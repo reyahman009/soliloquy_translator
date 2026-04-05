@@ -75,19 +75,26 @@
   <!-- ユーザー入力領域 -->
   <footer class="bg-white p-4 border-t">
     <div class="w-full max-w-4xl mx-auto flex flex-col gap-2">
-      <!-- 言語選択プルダウン -->
-      <select id="targetLanguage" class="border rounded-lg p-2 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 text-sm text-gray-700 font-medium" onchange="saveLanguage()">
-        <option value="自動判定">🌐 自動判定</option>
-        <option value="英語">🇬🇧 英語</option>
-        <option value="中国語">🇨🇳 中国語</option>
-        <option value="韓国語">🇰🇷 韓国語</option>
-        <option value="スペイン語">🇪🇸 スペイン語</option>
-        <option value="フランス語">🇫🇷 フランス語</option>
-        <option value="アラビア語">🇦🇪 アラビア語</option>
-      </select>
-      <div class="flex gap-2">
-        <textarea id="messageInput" rows="1" class="flex-1 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden" placeholder="例: 「ありがとう」って何て言うの？" onkeypress="handleKeyPress(event)"></textarea>
-        <button id="sendButton" onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-xl shadow-md transition duration-200 flex items-center justify-center min-w-[80px]">
+      <!-- 言語選択 & モデル選択 -->
+      <div class="flex gap-2 items-center flex-wrap">
+        <select id="targetLanguage" class="border rounded-lg p-2 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 text-sm text-gray-700 font-medium" onchange="saveLanguage()">
+          <option value="自動判定">自動判定</option>
+          <option value="英語">英語</option>
+          <option value="中国語">中国語</option>
+          <option value="韓国語">韓国語</option>
+          <option value="スペイン語">スペイン語</option>
+          <option value="フランス語">フランス語</option>
+          <option value="アラビア語">アラビア語</option>
+        </select>
+        <select id="modelSelect" class="border rounded-lg p-2 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-700 font-medium" onchange="saveModel()">
+          <option value="gemini-2.5-flash-lite">🪶 2.5 Flash Lite</option>
+          <option value="gemini-2.5-flash">⚡ 2.5 Flash</option>
+          <option value="gemini-2.5-pro">💎 2.5 Pro</option>
+        </select>
+      </div>
+      <div class="flex gap-2 items-end">
+        <textarea id="messageInput" rows="1" class="flex-1 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden h-[42px]" placeholder="例: 「ありがとう」って何て言うの？" onkeypress="handleKeyPress(event)"></textarea>
+        <button id="sendButton" onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-xl shadow-md transition duration-200 flex items-center justify-center min-w-[80px] h-[42px]">
           送信
         </button>
       </div>
@@ -101,6 +108,10 @@
       if (savedLang) {
         document.getElementById('targetLanguage').value = savedLang;
       }
+      const savedModel = localStorage.getItem('soliloquy_model');
+      if (savedModel) {
+        document.getElementById('modelSelect').value = savedModel;
+      }
     });
 
     // プルダウン変更時に設定を保存
@@ -108,21 +119,22 @@
       const lang = document.getElementById('targetLanguage').value;
       localStorage.setItem('soliloquy_target_language', lang);
     }
+    function saveModel() {
+      const model = document.getElementById('modelSelect').value;
+      localStorage.setItem('soliloquy_model', model);
+    }
     // テキストエリアの高さを自動調整
     const tx = document.getElementById('messageInput');
-    tx.setAttribute('style', 'height:' + (tx.scrollHeight) + 'px;overflow-y:hidden;');
+    tx.setAttribute('style', 'height:42px;overflow-y:hidden;');
     tx.addEventListener("input", OnInput, false);
 
     function OnInput() {
-      this.style.height = 'auto';
-      this.style.height = (this.scrollHeight) + 'px';
-      if(this.value === '') {
-        this.style.height = 'auto';
-      }
+      this.style.height = '42px';
+      this.style.height = Math.max(42, this.scrollHeight) + 'px';
     }
 
     function handleKeyPress(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && e.ctrlKey) {
         e.preventDefault();
         sendMessage();
       }
@@ -236,6 +248,7 @@
       const text = input.value.trim();
       const sendBtn = document.getElementById('sendButton');
       const targetLang = document.getElementById('targetLanguage').value || "自動判定";
+      const modelName = document.getElementById('modelSelect').value || "gemini-2.5-flash-lite";
 
       if (!text) return;
 
@@ -272,7 +285,7 @@
           
           showError(error.message || '通信エラーが発生しました。');
         })
-        .processChat(text, targetLang);
+        .processChat(text, targetLang, modelName);
     }
 
     // --- 音声読み上げ (Text-to-Speech) ロジック ---
