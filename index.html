@@ -62,8 +62,12 @@
         <option value="フランス語">🇫🇷 フランス語</option>
         <option value="アラビア語">🇦🇪 アラビア語</option>
       </select>
+      <div class="flex gap-1 mb-2 mt-2">
+        <button id="micJpBtn" onclick="toggleVoiceRecognition('ja-JP')" class="flex items-center gap-1 bg-gray-100 border hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-xs font-medium transition duration-200" title="日本語で質問する">🎤 🇯🇵 日本語で話す</button>
+        <button id="micTargetBtn" onclick="toggleVoiceRecognition('target')" class="flex items-center gap-1 bg-gray-100 border hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-xs font-medium transition duration-200" title="選んだ言語で話す">🎤 🌐 学習言語で話す</button>
+      </div>
       <div class="flex gap-2">
-        <textarea id="messageInput" rows="1" class="flex-1 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden" placeholder="例: 「ありがとう」って何て言うの？" onkeypress="handleKeyPress(event)"></textarea>
+        <textarea id="messageInput" rows="1" class="flex-1 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden" placeholder="例: 「ありがとう」って何て言うの？" onkeypress="handleKeyPress(event)" onfocus="this.setAttribute('data-original-text', this.value)"></textarea>
         <button id="sendButton" onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-xl shadow-md transition duration-200 flex items-center justify-center min-w-[80px]">
           送信
         </button>
@@ -209,6 +213,139 @@
           showError(error.message || '通信エラーが発生しました。');
         })
         .processChat(text, targetLang);
+    }
+
+    // --- 音声入力 (Web Speech API) ---
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isRecording = false;
+    let currentRecordingLang = '';
+
+    const langCodeMap = {
+      "自動判定": "ja-JP",
+      "英語": "en-US",
+      "中国語": "zh-CN",
+      "韓国語": "ko-KR",
+      "スペイン語": "es-ES",
+      "フランス語": "fr-FR",
+      "アラビア語": "ar-SA"
+    };
+
+    function initRecognition(langCode) {
+      if (!SpeechRecognition) {
+        showError('お使いのブラウザは音声入力に対応していません。ChromeやSafariをご利用ください。');
+        return;
+      }
+      
+      if (recognition) {
+        recognition.stop();
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = langCode;
+      recognition.interimResults = true; 
+      recognition.continuous = false;    
+
+      recognition.onstart = function() {
+        isRecording = true;
+        updateMicUI();
+      };
+
+      recognition.onresult = function(event) {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+        
+        const tx = document.getElementById('messageInput');
+        let orig = tx.getAttribute('data-original-text') || "";
+        if (orig && !orig.endsWith(" ") && !orig.endsWith("\n")) {
+            orig += " "; // 単語が繋がらないようにスペースを挿入
+        }
+        
+        tx.value = orig + finalTranscript + interimTranscript;
+        tx.dispatchEvent(new Event('input')); // 高さを自動調整
+
+        // 確定した部分があれば、それを新しいベース状態とする
+        if (finalTranscript) {
+             tx.setAttribute('data-original-text', tx.value);
+        }
+      };
+
+      recognition.onend = function() {
+        isRecording = false;
+        currentRecordingLang = '';
+        updateMicUI();
+        document.getElementById('messageInput').setAttribute('data-original-text', document.getElementById('messageInput').value);
+      };
+
+      recognition.onerror = function(event) {
+        console.error("Speech recognition error", event.error);
+        if (event.error !== 'no-speech') {
+           showError('音声認識でエラーが発生しました: ' + event.error);
+        }
+        isRecording = false;
+        currentRecordingLang = '';
+        updateMicUI();
+      };
+    }
+
+    function toggleVoiceRecognition(mode) {
+      if (!SpeechRecognition) {
+        showError('お使いのブラウザは音声入力に対応していません。');
+        return;
+      }
+
+      const tx = document.getElementById('messageInput');
+
+      // すでに録音中なら停止
+      if (isRecording) {
+        recognition.stop();
+        if (currentRecordingLang === mode || currentRecordingLang === 'ja-JP' && mode === 'ja-JP') {
+            return; // 同じボタンを押した場合はただの停止処理として終わる
+        }
+      }
+
+      // レコーディング開始時の元のテキストを保持
+      tx.setAttribute('data-original-text', tx.value);
+
+      let targetCode = 'ja-JP';
+      if (mode === 'target') {
+        const langVal = document.getElementById('targetLanguage').value;
+        targetCode = langCodeMap[langVal] || 'ja-JP';
+      }
+
+      currentRecordingLang = mode;
+      initRecognition(targetCode);
+      recognition.start();
+    }
+
+    function updateMicUI() {
+      const jpBtn = document.getElementById('micJpBtn');
+      const targetBtn = document.getElementById('micTargetBtn');
+      
+      // リセット
+      jpBtn.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'animate-pulse');
+      jpBtn.innerHTML = '🎤 🇯🇵 日本語で話す';
+      targetBtn.classList.remove('bg-red-100', 'border-red-400', 'text-red-700', 'animate-pulse');
+      targetBtn.innerHTML = '🎤 🌐 学習言語で話す';
+
+      // 録音中のスタイル適用
+      if (isRecording) {
+          if (currentRecordingLang === 'ja-JP') {
+              jpBtn.classList.add('bg-red-100', 'border-red-400', 'text-red-700', 'animate-pulse');
+              jpBtn.innerHTML = '🔴 録音中...';
+          } else if (currentRecordingLang === 'target') {
+              targetBtn.classList.add('bg-red-100', 'border-red-400', 'text-red-700', 'animate-pulse');
+              targetBtn.innerHTML = '🔴 録音中...';
+          }
+      }
     }
   </script>
 </body>
