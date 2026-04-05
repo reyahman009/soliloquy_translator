@@ -93,7 +93,7 @@
         </select>
       </div>
       <div class="flex gap-2 items-end">
-        <textarea id="messageInput" rows="1" class="flex-1 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden h-[42px]" placeholder="例: 「ありがとう」って何て言うの？" onkeypress="handleKeyPress(event)"></textarea>
+        <textarea id="messageInput" rows="1" class="flex-1 border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden h-[42px]" placeholder="例: 「ありがとう」って何て言うの？" onkeydown="handleKeyPress(event)"></textarea>
         <button id="sendButton" onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-xl shadow-md transition duration-200 flex items-center justify-center min-w-[80px] h-[42px]">
           送信
         </button>
@@ -339,8 +339,33 @@
                 utterance.voice = targetVoice;
             } else {
                 // 声が見つからない場合はエラーを出す
-                showError(`「${langName}」の音声がOSにインストールされていません。<br>
-                Google Apps Scriptの制限によりChrome専用のクラウド音声がブロックされてしまうため、<b>Windowsの「設定＞時刻と言語＞音声認識」からアラビア語の音声パックを直接インストール</b>してください。`);
+                const ua = navigator.userAgent;
+                let currentOS = '';
+                if (/android/i.test(ua)) currentOS = 'android';
+                else if (/iPad|iPhone|iPod/.test(ua)) currentOS = 'ios';
+                else if (/Macintosh|Mac OS X/.test(ua)) currentOS = 'mac';
+                else if (/Windows/.test(ua)) currentOS = 'windows';
+
+                const highlight = (os) => currentOS === os ? 'background:#FEF3C7;padding:4px 8px;border-radius:6px;border:1px solid #F59E0B;' : '';
+
+                showError(`「${langName}」の音声がお使いのデバイスにインストールされていません。<br><br>
+                  <b>▼ お使いのOS別の対応方法：</b><br><br>
+                  <div style="${highlight('windows')}">
+                    <b>🖥️ Windows</b><br>
+                    「設定」→「時刻と言語」→「言語と地域」→「言語の追加」から対象言語を追加してください。
+                  </div><br>
+                  <div style="${highlight('android')}">
+                    <b>📱 Android</b><br>
+                    「設定」→「システム」→「言語と入力」→「テキスト読み上げ」でGoogleテキスト読み上げエンジンの設定から対象言語の音声データをダウンロードしてください。
+                  </div><br>
+                  <div style="${highlight('ios')}">
+                    <b>🍎 iOS / iPadOS</b><br>
+                    「設定」→「アクセシビリティ」→「読み上げコンテンツ」→「声」から対象言語の音声をダウンロードしてください。
+                  </div><br>
+                  <div style="${highlight('mac')}">
+                    <b>💻 Mac</b><br>
+                    「システム設定」→「アクセシビリティ」→「読み上げコンテンツ」→「システムの声」→「声を管理」から対象言語の音声をダウンロードしてください。
+                  </div>`);
                 return;
             }
         } else {
