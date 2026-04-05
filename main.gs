@@ -44,9 +44,12 @@ function processChat(message, targetLanguage = "自動判定") {
     // 3. スプレッドシートへの保存：抽出された構造化データのみをシートの行に追記保存する
     saveToSheet(aiResponse.extracted_data);
 
-    // 4. フロントエンドへの返却処理：UI表示用の返信メッセージだけをフロントエンドに返す
+    // 4. フロントエンドへの返却処理：UI表示用に抽出データも一緒に返す
     return {
-      reply_message: aiResponse.reply_message
+      reply_message: aiResponse.reply_message,
+      phrase: aiResponse.extracted_data.phrase || "",
+      examples: aiResponse.extracted_data.examples || [],
+      language: aiResponse.extracted_data.language || targetLanguage
     };
   } catch (error) {
     console.error(error);

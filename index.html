@@ -135,12 +135,46 @@
       scrollToBottom();
     }
 
-    function appendAiMessage(text) {
+    function appendAiMessage(responseData) {
       const chatArea = document.getElementById('chatArea');
       const msgDiv = document.createElement('div');
       msgDiv.className = 'flex items-start gap-4';
+      
+      const text = typeof responseData === 'string' ? responseData : responseData.reply_message;
       const formattedText = parseMarkdown(text);
-      msgDiv.innerHTML = `<div class="bg-white border rounded-2xl p-4 shadow-sm text-gray-800 max-w-[80%]">${formattedText}</div>`;
+      
+      let html = `<div class="bg-white border rounded-2xl p-4 shadow-sm text-gray-800 max-w-[80%]">`;
+      html += `<div>${formattedText}</div>`;
+
+      // 🔊 音声読み上げボタンの生成ロジック
+      if (typeof responseData === 'object' && responseData.phrase && responseData.language) {
+          html += `<div class="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-2">`;
+          const lang = responseData.language;
+          
+          // フレーズ発音ボタン
+          const safePhrase = responseData.phrase.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          html += `<button onclick="playAudio('${safePhrase}', '${lang}')" class="flex items-center gap-1 bg-blue-50 border border-blue-100 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full text-xs font-medium transition duration-200" title="フレーズを発音">🔊 フレーズ：${responseData.phrase}</button>`;
+          
+          // 例文発音ボタン（複数あればすべて配置）
+          if (responseData.examples && responseData.examples.length > 0) {
+              responseData.examples.forEach((ex, idx) => {
+                  // 「Foreign sentence - 日本語訳」の形式から前半分だけを雑に抽出する。失敗したとしても許容。
+                  let foreignText = ex;
+                  if (ex.includes(' - ')) {
+                      foreignText = ex.split(' - ')[0];
+                  } else if (ex.includes('（')) {
+                      foreignText = ex.split('（')[0];
+                  }
+                  
+                  const safeEx = foreignText.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                  html += `<button onclick="playAudio('${safeEx}', '${lang}')" class="flex items-center gap-1 bg-green-50 border border-green-100 hover:bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-xs font-medium transition duration-200" title="例文${idx + 1}を発音">🔊 例文${idx + 1}</button>`;
+              });
+          }
+          html += `</div>`;
+      }
+
+      html += `</div>`;
+      msgDiv.innerHTML = html;
       chatArea.appendChild(msgDiv);
       scrollToBottom();
     }
@@ -195,7 +229,7 @@
           input.focus();
           
           if (response && response.reply_message) {
-            appendAiMessage(response.reply_message);
+            appendAiMessage(response);
           } else {
             showError('無効なレスポンスを受け取りました。');
           }
@@ -209,6 +243,35 @@
           showError(error.message || '通信エラーが発生しました。');
         })
         .processChat(text, targetLang);
+    }
+
+    // --- 音声読み上げ (Text-to-Speech) ロジック ---
+    const ttsLangCodeMap = {
+      "英語": "en-US",
+      "中国語": "zh-CN",
+      "韓国語": "ko-KR",
+      "スペイン語": "es-ES",
+      "フランス語": "fr-FR",
+      "アラビア語": "ar-SA"
+    };
+
+    function playAudio(text, langName) {
+        if (!('speechSynthesis' in window)) {
+            showError('お使いのブラウザはTTS（音声読み上げ）に対応していません。');
+            return;
+        }
+
+        // 現在スピーチ中のものがあればキャンセルして上書き
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // 言語コードのマッピング（見つからなければデフォルトでen-US）
+        // 「自動判定」等で言語名が不明確な場合は一旦英語になる。
+        // ※AIが返してくる `extracted_data.language` が "英語" などになっていればここで拾える
+        utterance.lang = ttsLangCodeMap[langName] || 'en-US';
+
+        window.speechSynthesis.speak(utterance);
     }
   </script>
 </body>
