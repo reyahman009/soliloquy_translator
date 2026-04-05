@@ -151,10 +151,19 @@
       document.getElementById('errorMessageContainer').classList.add('hidden');
     }
 
+    // HTMLエスケープ（XSS防止）
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     // 簡単なマークダウンをHTMLに変換（段落と太字程度のサポート）
     function parseMarkdown(text) {
+      // まずHTMLエスケープしてからマークダウン変換
+      let html = escapeHtml(text);
       // 改行を<br>に変換
-      let html = text.replace(/\n/g, '<br>');
+      html = html.replace(/\n/g, '<br>');
       // 太字 **text** を <strong>text</strong> に変換
       html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
       return html;
@@ -187,7 +196,7 @@
           const lang = responseData.language;
           
           // フレーズ表示領域
-          const safePhrase = responseData.phrase.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          const safePhrase = responseData.phrase.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
           html += `<div class="flex items-center gap-2">
                      <span class="text-xs font-bold text-gray-400">📝 保存フレーズ:</span>
                      <span class="text-sm font-medium text-blue-700">${responseData.phrase}</span>
@@ -205,7 +214,7 @@
                       foreignText = ex.split('（')[0];
                   }
                   
-                  const safeEx = foreignText.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                  const safeEx = foreignText.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                   html += `<div class="flex items-start gap-2 bg-gray-50 p-2.5 rounded-lg border border-gray-100 text-sm">
                              <button onclick="playAudio('${safeEx}', '${lang}')" class="shrink-0 text-green-600 hover:text-green-800 transition duration-200 mt-0.5" title="例文${idx + 1}を発音">🔊</button>
                              <span class="text-gray-700 leading-relaxed">${ex}</span>
@@ -255,7 +264,7 @@
       closeError();
       appendUserMessage(text);
       input.value = '';
-      input.style.height = 'auto';
+      input.style.height = '42px';
       input.disabled = true;
       sendBtn.disabled = true;
       sendBtn.classList.add('opacity-50');
@@ -290,13 +299,19 @@
 
     // --- 音声読み上げ (Text-to-Speech) ロジック ---
     let availableVoices = [];
+
+    // クロスプラットフォーム対応の音声リスト取得関数
+    function loadVoices() {
+      if (!('speechSynthesis' in window)) return;
+      availableVoices = window.speechSynthesis.getVoices();
+    }
+
     if ('speechSynthesis' in window) {
-        // 初回ロードで取れる分
-        availableVoices = window.speechSynthesis.getVoices();
-        // 遅延でロードされたタイミングでキャッシュ
-        window.speechSynthesis.onvoiceschanged = function() {
-            availableVoices = window.speechSynthesis.getVoices();
-        };
+        loadVoices();
+        // Chrome(Android/PC)やSafari(iOS/Mac)向けの非同期イベント
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
     }
 
     const ttsLangCodeMap = {
@@ -314,67 +329,74 @@
             return;
         }
 
-        // 現在スピーチ中のものがあればキャンセルして上書き
+        // 以前の音声が残っているとiOS/Mac等で詰まるバグを防止
         window.speechSynthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
-        
-        // 言語コードのマッピング（見つからなければデフォルトでen-US）
-        const langCode = ttsLangCodeMap[langName] || 'en-US';
-        utterance.lang = langCode;
+        const targetLangCode = ttsLangCodeMap[langName] || 'en-US';
+        utterance.lang = targetLangCode; // 一旦デフォルトをセット
 
-        // --- OS/ブラウザにインストールされている音声エンジンを明示的に割り当てる ---
-        // Chromeの非同期ロード対策としてキャッシュがあればそれを利用
+        // 音声リストの取得（iOS Safariは直前で取得しないと空になることがある）
         let voices = window.speechSynthesis.getVoices();
         if (voices.length === 0) voices = availableVoices;
 
         if (voices.length > 0) {
-            const baseLang = langCode.split('-')[0]; // 例: 'ar'
-            
-            // 1. 完全一致 (ar-SA) → 2. アンダースコア表記 (ar_SA) → 3. 前方一致 (ar-AEなど) の順で探す
-            const targetVoice = voices.find(v => v.lang.replace('_', '-') === langCode) || 
+            const baseLang = targetLangCode.split('-')[0]; // 例: 'ar'
+
+            // iOS/Mac特有のアンダースコア(ar_SA)とハイフン(ar-SA)の差異を吸収しつつ、
+            // Android等で地域コードが異なる(ar-AE等)場合の前方一致を探す
+            const targetVoice = voices.find(v => v.lang.replace('_', '-') === targetLangCode.replace('_', '-')) ||
                                 voices.find(v => v.lang.startsWith(baseLang));
-            
+
             if (targetVoice) {
                 utterance.voice = targetVoice;
-            } else {
-                // 声が見つからない場合はエラーを出す
-                const ua = navigator.userAgent;
-                let currentOS = '';
-                if (/android/i.test(ua)) currentOS = 'android';
-                else if (/iPad|iPhone|iPod/.test(ua)) currentOS = 'ios';
-                else if (/Macintosh|Mac OS X/.test(ua)) currentOS = 'mac';
-                else if (/Windows/.test(ua)) currentOS = 'windows';
-
-                const highlight = (os) => currentOS === os ? 'background:#FEF3C7;padding:4px 8px;border-radius:6px;border:1px solid #F59E0B;' : '';
-
-                showError(`「${langName}」の音声がお使いのデバイスにインストールされていません。<br><br>
-                  <b>▼ お使いのOS別の対応方法：</b><br><br>
-                  <div style="${highlight('windows')}">
-                    <b>🖥️ Windows</b><br>
-                    「設定」→「時刻と言語」→「言語と地域」→「言語の追加」から対象言語を追加してください。
-                  </div><br>
-                  <div style="${highlight('android')}">
-                    <b>📱 Android</b><br>
-                    「設定」→「システム」→「言語と入力」→「テキスト読み上げ」でGoogleテキスト読み上げエンジンの設定から対象言語の音声データをダウンロードしてください。
-                  </div><br>
-                  <div style="${highlight('ios')}">
-                    <b>🍎 iOS / iPadOS</b><br>
-                    「設定」→「アクセシビリティ」→「読み上げコンテンツ」→「声」から対象言語の音声をダウンロードしてください。
-                  </div><br>
-                  <div style="${highlight('mac')}">
-                    <b>💻 Mac</b><br>
-                    「システム設定」→「アクセシビリティ」→「読み上げコンテンツ」→「システムの声」→「声を管理」から対象言語の音声をダウンロードしてください。
-                  </div>`);
-                return;
+                // AndroidとiOS対策。見つけたVoiceの正確なlangで上書きし、完全一致させる
+                utterance.lang = targetVoice.lang;
             }
+            // voiceが見つからなくてもreturnしない。
+            // Android等ではgetVoices()にシステムTTS全音声が含まれないことがあるが、
+            // utterance.langだけ設定すればシステムTTSエンジンが直接処理できる。
         } else {
-             // まだロード中か完全にブロックされている場合
-             showError('音声機能のロード中です。数秒待ってからもう一度お試しください。');
-             return;
+             // iOSなどで初回音声リスト取得が間に合わなかった場合のフォールバック
+             console.warn('音声リストが空ですが、デフォルトエンジンでの再生を試みます');
         }
 
-        window.speechSynthesis.speak(utterance);
+        // 音声読み上げに失敗した場合のエラーハンドラ
+        utterance.onerror = function(event) {
+            const ua = navigator.userAgent;
+            let currentOS = '';
+            if (/android/i.test(ua)) currentOS = 'android';
+            else if (/iPad|iPhone|iPod/.test(ua)) currentOS = 'ios';
+            else if (/Macintosh|Mac OS X/.test(ua)) currentOS = 'mac';
+            else if (/Windows/.test(ua)) currentOS = 'windows';
+
+            const highlight = (os) => currentOS === os ? 'background:#FEF3C7;padding:4px 8px;border-radius:6px;border:1px solid #F59E0B;' : '';
+
+            showError(`「${langName}」の音声読み上げに失敗しました。音声データがインストールされていない可能性があります。<br><br>
+              <b>▼ お使いのOS別の対応方法：</b><br><br>
+              <div style="${highlight('windows')}">
+                <b>🖥️ Windows</b><br>
+                「設定」→「時刻と言語」→「言語と地域」→「言語の追加」から対象言語を追加してください。
+              </div><br>
+              <div style="${highlight('android')}">
+                <b>📱 Android</b><br>
+                「設定」→「システム」→「言語と入力」→「テキスト読み上げ」でGoogleテキスト読み上げエンジンの設定から対象言語の音声データをダウンロードしてください。
+              </div><br>
+              <div style="${highlight('ios')}">
+                <b>🍎 iOS / iPadOS</b><br>
+                「設定」→「アクセシビリティ」→「読み上げコンテンツ」→「声」から対象言語の音声をダウンロードしてください。
+              </div><br>
+              <div style="${highlight('mac')}">
+                <b>💻 Mac</b><br>
+                「システム設定」→「アクセシビリティ」→「読み上げコンテンツ」→「システムの声」→「声を管理」から対象言語の音声をダウンロードしてください。
+              </div>`);
+        };
+
+        // cancel()直後にspeak()するとiOS/Mac/Android Chromeで
+        // サイレントに失敗するバグがあるため、全プラットフォームで微小な遅延を入れる
+        setTimeout(() => {
+            window.speechSynthesis.speak(utterance);
+        }, 50);
     }
   </script>
 </body>
