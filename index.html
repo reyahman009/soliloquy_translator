@@ -314,6 +314,8 @@
         }
     }
 
+    let ttsTimeoutId = null;
+
     const ttsLangCodeMap = {
       "英語": "en-US",
       "中国語": "zh-CN",
@@ -327,6 +329,12 @@
         if (!('speechSynthesis' in window)) {
             showError('お使いのブラウザはTTS（音声読み上げ）に対応していません。');
             return;
+        }
+
+        // 前回のsetTimeoutが残っている場合はキャンセル（連打対策）
+        if (ttsTimeoutId !== null) {
+            clearTimeout(ttsTimeoutId);
+            ttsTimeoutId = null;
         }
 
         // 以前の音声が残っているとiOS/Mac等で詰まるバグを防止
@@ -362,7 +370,9 @@
         }
 
         // 音声読み上げに失敗した場合のエラーハンドラ
+        // cancel()による中断（interrupted/canceled）は正常動作なのでエラー表示しない
         utterance.onerror = function(event) {
+            if (event.error === 'interrupted' || event.error === 'canceled') return;
             const ua = navigator.userAgent;
             let currentOS = '';
             if (/android/i.test(ua)) currentOS = 'android';
@@ -394,7 +404,8 @@
 
         // cancel()直後にspeak()するとiOS/Mac/Android Chromeで
         // サイレントに失敗するバグがあるため、全プラットフォームで微小な遅延を入れる
-        setTimeout(() => {
+        ttsTimeoutId = setTimeout(() => {
+            ttsTimeoutId = null;
             window.speechSynthesis.speak(utterance);
         }, 50);
     }
