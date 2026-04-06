@@ -1,10 +1,99 @@
 /**
- * 英語学習サポートAI (スプレッドシート連携)
+ * 語学学習サポートAI (スプレッドシート連携)
  * バックエンド処理スクリプト (main.gs)
  */
 
 // GASの「スクリプトプロパティ」から環境変数（APIキーなど）を読み込むためのオブジェクト
 const SCRIPT_PROPERTIES = PropertiesService.getScriptProperties();
+
+// --- カスタムメニュー ---
+
+/**
+ * スプレッドシートを開いた時に自動でカスタムメニューを追加するトリガー関数
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('語学学習AI')
+    .addItem('初期設定（APIキーの登録）', 'showApiKeyDialog')
+    .addItem('アプリを公開（デプロイ）', 'showDeployGuide')
+    .addToUi();
+}
+
+/**
+ * APIキー入力ダイアログを表示する
+ */
+function showApiKeyDialog() {
+  const ui = SpreadsheetApp.getUi();
+  const current = SCRIPT_PROPERTIES.getProperty('GEMINI_API_KEY');
+  const status = current ? '（登録済み）' : '（未登録）';
+
+  const result = ui.prompt(
+    'Gemini APIキーの登録 ' + status,
+    'Google AI Studio（https://aistudio.google.com/）で取得したAPIキーを貼り付けてください。',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (result.getSelectedButton() === ui.Button.OK) {
+    const key = result.getResponseText().trim();
+    if (key) {
+      SCRIPT_PROPERTIES.setProperty('GEMINI_API_KEY', key);
+      ui.alert('APIキーを登録しました。\n\n次に「語学学習AI」メニュー →「アプリを公開（デプロイ）」に進んでください。');
+    } else {
+      ui.alert('APIキーが空です。もう一度お試しください。');
+    }
+  }
+}
+
+/**
+ * デプロイ手順をガイドするダイアログを表示する
+ */
+function showDeployGuide() {
+  const html = HtmlService.createHtmlOutput(`
+    <style>
+      body { font-family: sans-serif; font-size: 14px; line-height: 1.7; color: #333; padding: 8px; }
+      h3 { margin-top: 0; color: #1a73e8; }
+      ol { padding-left: 20px; }
+      li { margin-bottom: 8px; }
+      .highlight { background: #FEF3C7; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+      .note { background: #f0f4ff; padding: 12px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
+    </style>
+    <h3>アプリの公開（デプロイ）手順</h3>
+    <ol>
+      <li>このダイアログを閉じて、下の<span class="highlight">「エディタを開く」</span>ボタンをクリック</li>
+      <li>Apps Scriptエディタが開いたら、右上の<span class="highlight">「デプロイ」</span>ボタンをクリック</li>
+      <li><span class="highlight">「新しいデプロイ」</span>をクリック</li>
+      <li>左上の<span class="highlight">歯車アイコン</span>をクリック →<span class="highlight">「ウェブアプリ」</span>を選ぶ</li>
+      <li>設定を確認:
+        <ul>
+          <li>実行するユーザー → <span class="highlight">「自分」</span></li>
+          <li>アクセスできるユーザー → <span class="highlight">「自分のみ」</span></li>
+        </ul>
+      </li>
+      <li><span class="highlight">「デプロイ」</span>ボタンを押す</li>
+      <li>「アクセスを承認」→ アカウントを選択 → 「詳細」→ 「〇〇（安全ではないページ）に移動」→「許可」</li>
+      <li>表示されたURLがアプリのアドレスです。ブックマークしておきましょう！</li>
+    </ol>
+    <div style="text-align:center; margin-top: 16px;">
+      <a href="EDITOR_URL_PLACEHOLDER" target="_blank"
+         style="display:inline-block; background:#1a73e8; color:#fff; padding:10px 24px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:14px;">
+        エディタを開く
+      </a>
+    </div>
+  `)
+    .setWidth(520)
+    .setHeight(440);
+
+  // スクリプトIDからエディタURLを生成し、ダイアログ内のリンクに埋め込む
+  const scriptId = ScriptApp.getScriptId();
+  const editorUrl = 'https://script.google.com/d/' + scriptId + '/edit';
+  const finalHtml = HtmlService.createHtmlOutput(
+    html.getContent().replace('EDITOR_URL_PLACEHOLDER', editorUrl)
+  )
+    .setWidth(520)
+    .setHeight(440);
+
+  SpreadsheetApp.getUi().showModalDialog(finalHtml, 'アプリの公開手順');
+}
 
 /**
  * WebアプリのURLにアクセスがあった際（GETリクエスト時）に最初に呼ばれる関数
